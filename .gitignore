@@ -1,0 +1,8 @@
+# Binaire Kafka (re-téléchargeable, ~120 Mo)
+partie1-kafka-local/kafka_2.13-3.9.1/
+partie1-kafka-local/*.tgz
+# Build Maven
+kafka-spring-cloud-streams/target/
+.DS_Store
+.idea/
+*.iml
