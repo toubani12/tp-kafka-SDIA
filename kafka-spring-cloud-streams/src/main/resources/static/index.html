@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Real Time Analytics</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/smoothie/1.36.1/smoothie.min.js"></script>
+    <style>
+        :root { --bg:#0f1420; --panel:#171e2e; --line:#26304a; --text:#e8ecf4; --muted:#8b96ad; --ok:#3ddc97; --ko:#ff6b6b; }
+        * { box-sizing: border-box; }
+        body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system, "Segoe UI", Roboto, sans-serif; }
+        header { padding:22px 32px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+        h1 { margin:0; font-size:20px; font-weight:600; }
+        .sub { color:var(--muted); font-size:13px; margin-top:4px; }
+        .status { font-size:13px; padding:6px 12px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+        .status b { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--ko); margin-right:8px; }
+        .status.on b { background:var(--ok); box-shadow:0 0 8px var(--ok); }
+        main { padding:24px 32px; display:grid; gap:20px; }
+        .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:16px; }
+        .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; border-top:3px solid var(--c); }
+        .card .k { color:var(--muted); font-size:13px; }
+        .card .v { font-size:34px; font-weight:700; margin-top:6px; font-variant-numeric:tabular-nums; }
+        .card .u { color:var(--muted); font-size:12px; }
+        .chart { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+        .chart h2 { margin:0 0 12px; font-size:14px; font-weight:600; color:var(--muted); }
+        canvas { width:100%; height:360px; display:block; }
+        pre { margin:0; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; color:var(--muted); font-size:13px; overflow:auto; }
+    </style>
+</head>
+<body>
+<header>
+    <div>
+        <h1>Real Time Analytics : visites de pages</h1>
+        <div class="sub">Kafka Streams (fenêtre de 5 s, durée &gt; 100 ms) → store <code>count-store</code> → SSE <code>/analytics</code></div>
+    </div>
+    <div class="status" id="status"><b></b>Connexion…</div>
+</header>
+<main>
+    <div class="cards" id="cards"></div>
+    <div class="chart">
+        <h2>Nombre de visites par page (fenêtre courante de 5 secondes)</h2>
+        <canvas id="chart2"></canvas>
+    </div>
+    <pre id="last">en attente du premier événement…</pre>
+</main>
+<script>
+    var colors = ['#3ddc97', '#ff6b6b', '#5fafff', '#f5c26b', '#c38bff', '#4dd0e1'];
+    var series = {};
+    var chart = new SmoothieChart({
+        millisPerPixel: 25, tooltip: true, minValue: 0, maxValueScale: 1.2,
+        grid: { fillStyle: '#171e2e', strokeStyle: '#26304a', verticalSections: 5, borderVisible: false },
+        labels: { fillStyle: '#8b96ad', fontSize: 12 }
+    });
+    var canvas = document.getElementById('chart2');
+    function resize() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; }
+    window.addEventListener('resize', resize); resize();
+    chart.streamTo(canvas, 1000);
+
+    function serie(page) {
+        if (series[page]) return series[page];
+        var c = colors[Object.keys(series).length % colors.length];
+        var ts = new TimeSeries();
+        chart.addTimeSeries(ts, { strokeStyle: c, fillStyle: c + '33', lineWidth: 2 });
+        var card = document.createElement('div');
+        card.className = 'card'; card.style.setProperty('--c', c);
+        card.innerHTML = '<div class="k">Page ' + page + '</div><div class="v">0</div><div class="u">visites / 5 s</div>';
+        document.getElementById('cards').appendChild(card);
+        return series[page] = { ts: ts, value: card.querySelector('.v') };
+    }
+    ['P1', 'P2'].forEach(serie);
+
+    var statusEl = document.getElementById('status');
+    var sse = new EventSource('/analytics');
+    function connected() { statusEl.className = 'status on'; statusEl.lastChild.textContent = 'Flux SSE connecté'; }
+    sse.onopen = connected;
+    sse.onerror = function () { statusEl.className = 'status'; statusEl.lastChild.textContent = 'Déconnecté, reconnexion…'; };
+    sse.onmessage = function (event) {
+        connected();
+        var data = JSON.parse(event.data);
+        var now = Date.now();
+        Object.keys(data).forEach(serie);
+        Object.keys(series).forEach(function (page) {
+            var v = data[page] || 0;
+            series[page].ts.append(now, v);
+            series[page].value.textContent = v;
+        });
+        document.getElementById('last').textContent = new Date().toLocaleTimeString() + '  data: ' + event.data;
+    };
+</script>
+</body>
+</html>
