@@ -53,7 +53,7 @@ tp-kafka/
 │       └── resources/
 │           ├── application.properties
 │           └── static/index.html                   ← tableau de bord temps réel
-└── .tools/                         ← scripts de capture + sorties brutes des commandes (logs/)
+
 ```
 
 ---
